@@ -5,18 +5,26 @@ import type {
   ProviderRequest,
   ProviderStreamEvent,
 } from "./types.js";
+import type { ProviderName } from "../engine/types.js";
 import { normalizeProviderError } from "./errors.js";
 
 /**
- * OpenAI adapter via chat.completions streaming. Accumulates tool_call deltas
- * and emits them on finish. Usage is read from the final chunk when available
- * (stream_options.include_usage), else approximated as 0/0.
+ * OpenAI-compatible adapter via chat.completions streaming. Works for OpenAI
+ * and any provider that speaks the same API — xAI (Grok) and Google (Gemini)
+ * via their OpenAI-compat base URLs — by passing `baseURL` + `name`.
+ * Accumulates tool_call deltas; reads usage from the final chunk when available.
  */
-export function createOpenAIProvider(apiKey: string): Provider {
-  const client = new OpenAI({ apiKey });
+export function createOpenAIProvider(
+  apiKey: string,
+  opts?: { baseURL?: string; name?: ProviderName },
+): Provider {
+  const client = new OpenAI({
+    apiKey,
+    ...(opts?.baseURL ? { baseURL: opts.baseURL } : {}),
+  });
 
   return {
-    name: "openai",
+    name: opts?.name ?? "openai",
     async *run(req: ProviderRequest): AsyncIterable<ProviderStreamEvent> {
       const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = req.tools.map(
         (t) => ({
@@ -102,7 +110,7 @@ export function createOpenAIProvider(apiKey: string): Provider {
 
         yield { type: "done", usage };
       } catch (err) {
-        throw normalizeProviderError(err, "openai");
+        throw normalizeProviderError(err, opts?.name ?? "openai");
       }
     },
   };

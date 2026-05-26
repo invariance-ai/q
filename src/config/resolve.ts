@@ -2,6 +2,7 @@ import type { Config, FeatureFlags } from "./schema.js";
 import type { ProviderName } from "../engine/types.js";
 import { readConfig } from "./store.js";
 import { getEnv } from "../util/env.js";
+import { PROVIDER_ENV_VARS } from "../providers/index.js";
 
 /**
  * Resolution helpers layering env over file config. Env always wins and is
@@ -17,10 +18,12 @@ export function resolveApiKey(
   config?: Config,
 ): string | undefined {
   const cfg = cfgOrRead(config);
-  if (provider === "anthropic") {
-    return getEnv("ANTHROPIC_API_KEY") ?? cfg.keys.anthropic;
+  // Env vars (in the provider's preferred order) always win, then the config file.
+  for (const envVar of PROVIDER_ENV_VARS[provider] ?? []) {
+    const val = getEnv(envVar);
+    if (val) return val;
   }
-  return getEnv("OPENAI_API_KEY") ?? cfg.keys.openai;
+  return (cfg.keys as Record<string, string | undefined>)[provider];
 }
 
 export function resolveModel(flagModel?: string, config?: Config): string {

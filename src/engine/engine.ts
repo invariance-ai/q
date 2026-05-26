@@ -13,7 +13,7 @@ import type {
 } from "./types.js";
 import { readConfig } from "../config/store.js";
 import { resolveApiKey, resolveModel, resolveFeatures } from "../config/resolve.js";
-import { getProvider, resolveProvider, KNOWN_MODELS } from "../providers/index.js";
+import { getProvider, resolveProvider, wireModelId, KNOWN_MODELS } from "../providers/index.js";
 import { buildSystemPrompt } from "../prompt/system.js";
 import { toProviderTools } from "../tools/to-provider.js";
 import { executeTool, toToolCallRecord } from "../tools/execute.js";
@@ -44,6 +44,8 @@ export function createEngine(deps?: EngineDeps): QEngine {
     const history: Turn[] = params.history ?? [];
 
     const provider = resolveProvider(model);
+    // The wire id drops any leading `provider/` so the API sees the model it expects.
+    const wireModel = wireModelId(model);
     const enabledTools = features.tools
       ? config.tools.filter((t) => t.enabled)
       : [];
@@ -127,7 +129,7 @@ export function createEngine(deps?: EngineDeps): QEngine {
             `Answer the user's question using only this result. Cite the tool as the source.`;
           let text = "";
           for await (const ev of provInst.run({
-            model,
+            model: wireModel,
             system: phraseSystem,
             messages: [{ role: "user", content: phrasePrompt }],
             tools: [],
@@ -174,7 +176,7 @@ export function createEngine(deps?: EngineDeps): QEngine {
     const providerInstance = getProvider(model, requireKey());
     const gen = runLoop({
       provider: providerInstance,
-      model,
+      model: wireModel,
       system,
       question: params.question,
       history,

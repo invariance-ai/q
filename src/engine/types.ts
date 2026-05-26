@@ -17,7 +17,16 @@ export interface Usage {
   outputTokens: number;
 }
 
-export type ProviderName = "anthropic" | "openai";
+export type ProviderName =
+  | "anthropic"
+  | "openai"
+  | "xai"
+  | "google"
+  | "perplexity"
+  | "groq"
+  | "mistral"
+  | "deepseek"
+  | "openrouter";
 
 /** Record of one tool invocation (redacted previews only). */
 export interface ToolCallRecord {

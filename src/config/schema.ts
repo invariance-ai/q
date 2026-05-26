@@ -109,6 +109,13 @@ export type FeatureFlags = z.infer<typeof FeatureFlagsSchema>;
 export const ProviderKeysSchema = z.object({
   anthropic: z.string().optional(),
   openai: z.string().optional(),
+  xai: z.string().optional(),
+  google: z.string().optional(),
+  perplexity: z.string().optional(),
+  groq: z.string().optional(),
+  mistral: z.string().optional(),
+  deepseek: z.string().optional(),
+  openrouter: z.string().optional(),
 });
 export type ProviderKeys = z.infer<typeof ProviderKeysSchema>;
 
