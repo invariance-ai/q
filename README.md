@@ -97,7 +97,7 @@ q flag --disable-pattern                       # and stop that pattern from matc
 
 Register your internal APIs in `q` once, then hand any agent a **single** tool — `q(question)` — instead of writing (and maintaining) one MCP/tool schema per endpoint. The agent asks in plain English; `q` picks the endpoint, injects auth, and returns the answer. No endpoint schemas leak into the agent's context, and common queries skip the model entirely via the fast-path.
 
-`q --json` returns the structured `answer` plus the `toolCalls` to cite. Wire it up in a few lines:
+`q --json` returns `{ answer, error, toolCalls, routedVia, model, usage }`. **Output contract:** when a tool call fails, `error` is set, `toolCalls[].ok` is `false`, and the process exits non-zero — gate on `error`/exit, don't relay `answer` blindly. Wire it up in a few lines:
 
 - **Claude Code** — drop-in skill: [`examples/claude-code-skill/`](./examples/claude-code-skill/)
 - **Any MCP client** (Claude Desktop, …) — one-file stdio server: [`examples/mcp/`](./examples/mcp/)
@@ -109,7 +109,8 @@ Register your internal APIs in `q` once, then hand any agent a **single** tool �
 
 ```sh
 q explain this stack trace
-q --json summarize the git log since v1.2 | jq -r .answer
+# scripts: check .error before trusting .answer (and `q` exits non-zero on failure)
+q --json "summarize the git log since v1.2" | jq -r '.error // .answer'
 ```
 
 Run `q` with no arguments (or `q chat`) for a multi-turn session with live streaming. Conversations are saved locally and resumable:
