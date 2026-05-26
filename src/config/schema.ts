@@ -79,6 +79,14 @@ export const ToolEntrySchema = z.object({
   match: z.array(ToolMatchSchema).default([]),
   enabled: z.boolean().default(true),
   timeoutMs: z.number().int().positive().max(120_000).default(15_000),
+  /**
+   * Opt-in escape hatch for the SSRF guard. When true, executeTool will NOT
+   * block requests that resolve to loopback / link-local / private / unique-
+   * local addresses. Leave false (the default) unless you intentionally need a
+   * tool to reach an internal host. Enabling this re-exposes the tool to
+   * cloud-metadata (169.254.169.254) and internal-service SSRF.
+   */
+  allowPrivateNetwork: z.boolean().default(false),
 });
 export type ToolEntry = z.infer<typeof ToolEntrySchema>;
 

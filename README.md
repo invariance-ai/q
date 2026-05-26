@@ -2,29 +2,29 @@
 
 # q
 
-**Turn your internal APIs into instant terminal answers.**
+**Turn your internal APIs into instant terminal answers — for you and your agents.**
 
 </div>
 
 ```console
-$ q nis score for last week's deploy
-0.82 — up from 0.74   ·  source: nis_score
+$ q deploy status for checkout-service
+checkout-service: v2.3.1 live, rolled out 4m ago   ·  source: deploy_status
 ```
 
-You registered the `nis_score` endpoint once. Now anyone on the team asks for it in plain English and gets the number back — **with zero LLM latency**, because the question matched a pattern and went straight to your API. When nothing matches, a model handles it instead.
+You registered the `deploy_status` endpoint once. Now anyone — a teammate at a terminal, or an AI agent — asks for it in plain English and gets the answer back. When the question matches a pattern, `q` calls your API directly (no model needed to decide *which* tool); when it doesn't, a model reasons over your registered tools and picks one.
 
-That's the whole idea: the metrics, deploy status, on-call info, and feature-flag lookups that today live behind a dozen half-remembered `curl` commands and dashboards become one thing you can just *ask*.
+The same registry powers both audiences: humans skip the dashboard, and **agents get a single `q(question)` tool instead of one hand-written schema per endpoint** — your internal API surface never enters their context.
 
 ```console
 $ q tools add \
-    --name nis_score \
-    --desc "NIS score for a deploy or entity" \
-    --url 'https://api.internal.example.com/nis?entity={{input.entity}}' \
-    --auth-type bearer --auth-env NIS_API_TOKEN \
-    --match 'nis score for {entity}'
+    --name deploy_status \
+    --desc "Latest deploy status for a service" \
+    --url 'https://api.internal.example.com/deploys/{{input.service}}/latest' \
+    --auth-type bearer --auth-env DEPLOY_API_TOKEN \
+    --match 'deploy status for {service}'
 
-$ q nis score for checkout-service     # → calls your API directly, no model in the loop
-$ q which deploy regressed nis this week?   # → no pattern match, so the model reasons over your tools
+$ q deploy status for checkout-service     # matched a pattern → calls your API directly
+$ q which services are failing health checks   # no match → the model reasons over your tools
 ```
 
 ## Install
@@ -33,14 +33,16 @@ $ q which deploy regressed nis this week?   # → no pattern match, so the model
 npm i -g @invariance/q
 ```
 
-Node ≥ 20. Set a key and go:
+Node ≥ 20. This installs a command named **`q`**. If that name is already taken on your `$PATH` (e.g. Amazon Q's `q`), alias it instead — `alias iq='q'` — or rename the symlink npm creates.
 
 ```sh
 export OPENAI_API_KEY=sk-...     # default model is gpt-4o-mini
-q nis score for checkout-service
+q deploy status for checkout-service
 ```
 
-(Anthropic works too — set `ANTHROPIC_API_KEY` and `q model set claude-opus-4-7`. The provider is inferred from the model id.)
+(Anthropic works too — set `ANTHROPIC_API_KEY` and `q model set claude-opus-4-7`. Provider is inferred from the model id.)
+
+> **Shell quoting:** bare questions work great, but `zsh`/`bash` treat `?`, `*`, and `'` specially. If your question has those, quote it — `q "what's failing right now?"` — or run `noglob q ...`. `q` prints a hint when it detects an unquoted glob.
 
 ## Registering an API as a tool
 
@@ -48,50 +50,54 @@ A tool is an HTTP endpoint plus a one-line description of when to use it. The mo
 
 ```sh
 q tools add \
-  --name deploy_status \
-  --desc "Current status of a service's latest deploy" \
-  --url 'https://api.internal.example.com/deploys/{{input.service}}/latest' \
+  --name oncall \
+  --desc "Who is currently on call for a team" \
+  --url 'https://api.internal.example.com/oncall?team={{input.team}}' \
   --method GET \
-  --auth-type bearer --auth-env DEPLOY_API_TOKEN \
-  --match 'deploy status for {service}'
+  --auth-type bearer --auth-env PAGERDUTY_TOKEN \
+  --match 'who is on call for {team}'
 ```
 
-- **Templates** — `url`, `query`, `headers`, and `body` interpolate `{{input.x}}` (filled by a pattern or the model) and `{{env.X}}` (your environment).
-- **Auth** — `--auth-type bearer|header --auth-env DEPLOY_API_TOKEN` reads the token from that env var at call time. The token is **never stored** — only the variable's name is.
+- **Templates** — `url`, `query`, `headers`, and `body` interpolate `{{input.x}}` (filled by a pattern or the model) and `{{env.X}}` (your environment). Values are URL-encoded into paths/queries.
+- **Auth** — `--auth-type bearer|header --auth-env PAGERDUTY_TOKEN` reads the token from that env var at call time. The token is **never stored** — only the variable's name is.
+- **Safety** — `q` blocks requests to private/link-local/metadata addresses by default (opt in per tool with `allowPrivateNetwork`), encodes interpolated inputs, and refuses to follow redirects that could leak your token.
 - **Manage** — `q tools list · test <name> --input k=v · enable · disable · remove`.
 
 Full reference: `q help tools`.
 
+### Share the registry with your team
+
+The registry is portable and secret-free (it stores env-var *names*, not tokens), so you can check it into a repo and share it:
+
+```sh
+q tools export --file team-tools.json   # commit this
+q tools import team-tools.json           # teammates / CI pull it in
+q tools import https://example.com/team-tools.json
+```
+
 ## Zero-latency routing (the `--match` part)
 
-A `--match` pattern sends a matching question straight to the tool — no model round-trip to decide *which* tool, no model latency at all if you don't want it.
+A `--match` pattern sends a matching question straight to the tool — no model round-trip to decide *which* tool.
 
 ```sh
 --match 'deploy status for {service}'     # phrase: {name} captures an input
---match '/^nis (?<entity>[\w-]+)$/'       # raw regex with named groups
+--match '/^oncall (?<team>[\w-]+)$/'       # raw regex with named groups
 ```
 
-Phrase patterns are forgiving — case-insensitive, whitespace-tolerant, trailing punctuation ignored. By default the raw API response is phrased into a sentence by the model; add `--no-phrase` (or `q feature regexPhraseWithLLM off`) to return the raw result with **zero LLM calls** — fully deterministic, works offline. Details: `q help regex`.
+Phrase patterns are forgiving — case-insensitive, whitespace-tolerant, trailing punctuation ignored. By default `q` then phrases the raw API response into a sentence with the model; add `--no-phrase` (or `q feature regexPhraseWithLLM off`) to return the raw result with **zero model calls** — fully deterministic and offline. The cite line (`source: <tool>`) always tells you where an answer came from.
 
-When a question *doesn't* match any pattern, `q` hands it to the model with your tools available, and the model picks one if it helps. Either way you get an answer; the cite line (`source: <tool>`) tells you where it came from.
-
-### Got a wrong match? Fix it.
+Mis-routed?
 
 ```sh
-q flag the deploy lookup hit the wrong service   # log it
-q flag --disable-pattern                         # and stop that pattern from matching
+q flag the oncall lookup hit the wrong team   # log it
+q flag --disable-pattern                       # and stop that pattern from matching
 ```
 
 ## Use q from your agents
 
-Register your internal APIs in `q` once, then hand any agent a **single** tool —
-`q(question)` — instead of writing one MCP/tool schema per endpoint. The agent
-asks in plain English; `q` picks the endpoint, injects auth, and returns the
-answer. No endpoint schemas leak to the agent, and common queries skip the model
-entirely via the regex fast-path.
+Register your internal APIs in `q` once, then hand any agent a **single** tool — `q(question)` — instead of writing (and maintaining) one MCP/tool schema per endpoint. The agent asks in plain English; `q` picks the endpoint, injects auth, and returns the answer. No endpoint schemas leak into the agent's context, and common queries skip the model entirely via the fast-path.
 
-`q --json` gives you the structured `answer` plus the `toolCalls` to cite. Wire
-it up in a few lines:
+`q --json` returns the structured `answer` plus the `toolCalls` to cite. Wire it up in a few lines:
 
 - **Claude Code** — drop-in skill: [`examples/claude-code-skill/`](./examples/claude-code-skill/)
 - **Any MCP client** (Claude Desktop, …) — one-file stdio server: [`examples/mcp/`](./examples/mcp/)
@@ -99,21 +105,22 @@ it up in a few lines:
 
 ## General questions & chat
 
-`q` answers ordinary questions too (no tools required):
+`q` also answers ordinary questions (no tools required), and `--json` makes it scriptable:
 
 ```sh
-q explain this regex: '^\d{3}-\d{4}$'
-q --json what is the capital of France     # structured output for scripts
+q explain this stack trace
+q --json summarize the git log since v1.2 | jq -r .answer
 ```
 
-Run `q` with no arguments (or `q chat`) for a multi-turn session with live streaming and slash commands (`/model`, `/tools`, `/flag`, `/clear`, `/help`, `/exit`). Conversations are saved locally and resumable:
+Run `q` with no arguments (or `q chat`) for a multi-turn session with live streaming. Conversations are saved locally and resumable:
 
 ```sh
 q sessions list            # recent chats: when · model · first message
-q sessions show <id>       # print a transcript
 q chat --continue          # pick up the most recent conversation
 q chat --resume <id>       # resume a specific one
 ```
+
+In-chat slash commands: `/model [id]` · `/tools` · `/sessions` · `/new` · `/retry` · `/think` · `/flag [note]` · `/clear` · `/help` · `/exit`.
 
 ## Configuration
 
@@ -133,17 +140,17 @@ q feature stream off       # don't stream tokens            (--no-stream)
 q feature format json      # default output format          (--format / --json)
 ```
 
-## Privacy
+## Privacy & security
 
-Anonymous usage telemetry is **opt-in and off by default**. `q` asks once, politely, and never again if you decline. Toggle anytime with `q telemetry on|off|status`; hard-disable with `Q_NO_TELEMETRY=1`. It never sends your questions, answers, tool URLs, responses, or keys — only coarse things like which command ran and whether routing was regex or model. See `q help telemetry`.
+Anonymous usage telemetry is **opt-in and off by default**. `q` asks once, politely, and never again if you decline. Toggle with `q telemetry on|off|status`; hard-disable with `Q_NO_TELEMETRY=1`. It never sends your questions, answers, tool URLs, responses, or keys — only coarse signals like which command ran and whether routing was regex or model. See `q help telemetry`.
 
-`q` also redacts API keys and bearer tokens from anything it prints or logs.
+`q` redacts API keys and bearer tokens from anything it prints or logs, blocks tool calls to private/internal network addresses by default, URL-encodes interpolated inputs, and won't follow token-leaking redirects.
 
 ## Help
 
 ```sh
 q help                 # overview + quickstart
-q help tools           # registering APIs, auth, inputs
+q help tools           # registering APIs, auth, sharing
 q help regex           # match patterns and {placeholders}
 ```
 

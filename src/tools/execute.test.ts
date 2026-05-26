@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ToolEntrySchema } from "../config/schema.js";
 import { executeTool, toToolCallRecord } from "./execute.js";
+import type { LookupFn } from "./ssrf.js";
 
 function makeFetchStub(
   capture: (url: string, init: RequestInit) => void,
@@ -11,6 +12,10 @@ function makeFetchStub(
     return new Response(response.body, { status: response.status });
   }) as unknown as typeof fetch;
 }
+
+/** Resolver that maps any DNS name to a public IP, so tests stay network-free
+ * without the SSRF guard blocking them on failed real DNS. */
+const publicLookup: LookupFn = async () => [{ address: "93.184.216.34", family: 4 }];
 
 describe("executeTool", () => {
   it("interpolates url + query and returns the body", async () => {
@@ -31,12 +36,38 @@ describe("executeTool", () => {
     const res = await executeTool(
       entry,
       { id: "42", q: "x y" },
-      { fetchImpl: stub },
+      { fetchImpl: stub, lookupFn: publicLookup },
     );
     expect(seenUrl).toBe("https://api.test/42?q=x+y");
     expect(res.ok).toBe(true);
     expect(res.status).toBe(200);
     expect(res.body).toBe("hello");
+  });
+
+  it("passes a whole-URL input through unencoded (web_fetch case)", async () => {
+    // When the entire url is a single {{input.url}} placeholder, the value is
+    // the full URL — encoding it would corrupt the scheme/host. It must be used
+    // raw (and still pass the SSRF guard).
+    let seenUrl = "";
+    const entry = ToolEntrySchema.parse({
+      name: "web_fetch",
+      description: "fetch a url",
+      url: "{{input.url}}",
+      input: { url: { type: "string", required: true } },
+    });
+    const stub = makeFetchStub(
+      (u) => {
+        seenUrl = u;
+      },
+      { ok: true, status: 200, body: "ok" },
+    );
+    const res = await executeTool(
+      entry,
+      { url: "https://example.com/path?x=1" },
+      { fetchImpl: stub, lookupFn: publicLookup },
+    );
+    expect(seenUrl).toBe("https://example.com/path?x=1");
+    expect(res.ok).toBe(true);
   });
 
   it("injects bearer auth from env", async () => {
@@ -54,7 +85,7 @@ describe("executeTool", () => {
       },
       { ok: true, status: 200, body: "ok" },
     );
-    await executeTool(entry, {}, { fetchImpl: stub });
+    await executeTool(entry, {}, { fetchImpl: stub, lookupFn: publicLookup });
     expect(headers["Authorization"]).toBe("Bearer secrettoken");
     delete process.env["TEST_TOKEN"];
   });
@@ -68,7 +99,7 @@ describe("executeTool", () => {
     const stub = (async () => {
       throw new Error("boom");
     }) as unknown as typeof fetch;
-    const res = await executeTool(entry, {}, { fetchImpl: stub });
+    const res = await executeTool(entry, {}, { fetchImpl: stub, lookupFn: publicLookup });
     expect(res.ok).toBe(false);
     expect(res.body).toContain("boom");
   });

@@ -96,6 +96,27 @@ describe("chatReducer", () => {
     expect(s.model).toBe("b");
   });
 
+  it("defaults think to false and TOGGLE_THINK flips it", () => {
+    const init = initialChatState("m");
+    expect(init.think).toBe(false);
+    const on = chatReducer(init, { type: "TOGGLE_THINK" });
+    expect(on.think).toBe(true);
+    const off = chatReducer(on, { type: "TOGGLE_THINK" });
+    expect(off.think).toBe(false);
+  });
+
+  it("CLEAR preserves the think preference", () => {
+    const s = drive(initialChatState("m"), [
+      { type: "TOGGLE_THINK" },
+      { type: "SUBMIT", question: "q" },
+      { type: "TOKEN", text: "x" },
+      { type: "DONE" },
+      { type: "CLEAR" },
+    ]);
+    expect(s.history).toEqual([]);
+    expect(s.think).toBe(true);
+  });
+
   it("CLEAR resets history but keeps the model", () => {
     const s = drive(initialChatState("keep-me"), [
       { type: "SUBMIT", question: "q" },

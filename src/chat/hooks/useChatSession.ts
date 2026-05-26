@@ -23,6 +23,8 @@ export interface ChatState {
   model: string;
   usage: Usage | null;
   error: string | null;
+  /** Whether extended thinking is enabled for subsequent asks. */
+  think: boolean;
 }
 
 export type ChatAction =
@@ -35,6 +37,7 @@ export type ChatAction =
   | { type: "ABORT" }
   | { type: "ERROR"; error: string }
   | { type: "SET_MODEL"; model: string }
+  | { type: "TOGGLE_THINK" }
   | { type: "CLEAR" };
 
 export function initialChatState(model: string, initialHistory: Turn[] = []): ChatState {
@@ -48,6 +51,7 @@ export function initialChatState(model: string, initialHistory: Turn[] = []): Ch
     model,
     usage: null,
     error: null,
+    think: false,
   };
 }
 
@@ -154,8 +158,12 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_MODEL":
       return { ...state, model: action.model };
 
+    case "TOGGLE_THINK":
+      return { ...state, think: !state.think };
+
     case "CLEAR":
-      return initialChatState(state.model);
+      // Fresh conversation, but keep the model + thinking preference.
+      return { ...initialChatState(state.model), think: state.think };
 
     default:
       return state;

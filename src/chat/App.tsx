@@ -3,6 +3,7 @@ import { Box, Text, useApp, useInput } from "ink";
 import type { QEngine, Turn } from "../engine/types.js";
 import { makeTheme } from "./theme.js";
 import { parseSlash } from "./commands/slash.js";
+import { listSessions } from "./sessions.js";
 import { useChatSession, type ChatState } from "./hooks/useChatSession.js";
 import { useStreamAsk } from "./hooks/useStreamAsk.js";
 import { Header } from "./components/Header.js";
@@ -21,6 +22,22 @@ export interface AppProps {
   initialHistory?: Turn[];
   /** Persist committed turns + current model (debounced by React renders). */
   onPersist?: (turns: Turn[], model: string) => void;
+}
+
+/** Compact "Ns/Nm/Nh/Nd ago" relative timestamp for the /sessions listing. */
+function relTime(ts: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function oneLine(s: string, n: number): string {
+  const flat = s.replace(/\s+/g, " ").trim();
+  return flat.length > n ? flat.slice(0, n - 1) + "…" : flat;
 }
 
 /**
@@ -79,9 +96,48 @@ export function App({
         case "exit":
           exit();
           return;
-        case "clear":
+        case "new":
           dispatch({ type: "CLEAR" });
+          setNotice(theme.dim("started a fresh conversation"));
           return;
+        case "sessions": {
+          const metas = listSessions().slice(0, 8);
+          if (metas.length === 0) {
+            setNotice(theme.dim("no saved sessions yet"));
+          } else {
+            const lines = metas.map(
+              (m) =>
+                `  ${theme.saffron(m.id)} · ${relTime(m.updatedAt)} · ${oneLine(m.firstMessage, 48)}`,
+            );
+            setNotice(theme.dim(`recent sessions:\n${lines.join("\n")}`));
+          }
+          return;
+        }
+        case "retry": {
+          const lastUser = [...stateRef.current.history]
+            .reverse()
+            .find((t) => t.role === "user");
+          if (lastUser) {
+            submit(lastUser.content);
+          } else {
+            setNotice(theme.dim("nothing to retry yet"));
+          }
+          return;
+        }
+        case "toggleThink": {
+          dispatch({ type: "TOGGLE_THINK" });
+          // state.think is the pre-toggle value; report the new one.
+          const next = !stateRef.current.think;
+          setNotice(theme.dim(`extended thinking ${next ? theme.saffron("on") : "off"}`));
+          return;
+        }
+        case "listModels": {
+          const list = models
+            .map((m) => (m === state.model ? `  ${theme.saffron(m)} (active)` : `  ${m}`))
+            .join("\n");
+          setNotice(theme.dim(`models:\n${list}`));
+          return;
+        }
         case "setModel": {
           if (models.includes(slash.model)) {
             dispatch({ type: "SET_MODEL", model: slash.model });
@@ -128,7 +184,7 @@ export function App({
           return;
       }
     },
-    [submit, exit, dispatch, models, tools, theme, onFlag],
+    [submit, exit, dispatch, models, tools, theme, onFlag, state.model],
   );
 
   useInput((inputChar, key) => {
@@ -166,6 +222,7 @@ export function App({
         toolCount={tools.length}
         usage={state.usage}
         theme={theme}
+        think={state.think}
       />
       <InputBox
         value={input}

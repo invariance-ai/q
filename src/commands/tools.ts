@@ -1,3 +1,5 @@
+import fs from "node:fs";
+
 import { Command } from "commander";
 import chalk from "chalk";
 
@@ -201,5 +203,89 @@ export function buildToolsCommand(): Command {
       });
     });
 
+  tools
+    .command("export")
+    .description(
+      "Export the tool registry as a JSON array (only auth env-var names are stored, not secrets — safe to share)",
+    )
+    .option("--file <path>", "write to a file instead of stdout")
+    .action((opts: { file?: string }) => {
+      handle(() => {
+        const entries = listToolEntries();
+        const json = JSON.stringify(entries, null, 2);
+        if (opts.file) {
+          fs.writeFileSync(opts.file, json + "\n", "utf8");
+          process.stdout.write(
+            chalk.green(`exported ${entries.length} tool(s) to ${opts.file}`) + "\n",
+          );
+        } else {
+          process.stdout.write(json + "\n");
+        }
+      });
+    });
+
+  tools
+    .command("import <fileOrUrl>")
+    .description("Import tools from a JSON array (local file path or http(s) URL)")
+    .option("--overwrite", "replace tools whose name already exists")
+    .action((fileOrUrl: string, opts: { overwrite?: boolean }) => {
+      handle(async () => {
+        const raw = await readSource(fileOrUrl);
+
+        let parsedJson: unknown;
+        try {
+          parsedJson = JSON.parse(raw);
+        } catch {
+          throw new ToolError(`source is not valid JSON: ${fileOrUrl}`);
+        }
+        if (!Array.isArray(parsedJson)) {
+          throw new ToolError("expected a JSON array of tool entries");
+        }
+
+        let added = 0;
+        let skipped = 0;
+        let invalid = 0;
+
+        for (const candidate of parsedJson) {
+          const parsed = ToolEntrySchema.safeParse(candidate);
+          if (!parsed.success) {
+            invalid++;
+            continue;
+          }
+          const entry = parsed.data;
+          const exists = getTool(entry.name) !== undefined;
+          if (exists && !opts.overwrite) {
+            skipped++;
+            continue;
+          }
+          addTool(entry);
+          added++;
+        }
+
+        process.stdout.write(
+          chalk.green(`imported: ${added} added`) +
+            chalk.dim(`, ${skipped} skipped, ${invalid} invalid`) +
+            "\n",
+        );
+      });
+    });
+
   return tools;
+}
+
+/** Read import source from an http(s) URL (via fetch) or a local file path. */
+async function readSource(fileOrUrl: string): Promise<string> {
+  if (/^https?:\/\//i.test(fileOrUrl)) {
+    const res = await fetch(fileOrUrl);
+    if (!res.ok) {
+      throw new ToolError(`failed to fetch ${fileOrUrl}: ${res.status} ${res.statusText}`);
+    }
+    return res.text();
+  }
+  try {
+    return fs.readFileSync(fileOrUrl, "utf8");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new ToolError(`cannot read ${fileOrUrl}: ${message}`);
+  }
 }

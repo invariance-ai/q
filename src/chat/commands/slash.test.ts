@@ -14,14 +14,31 @@ describe("parseSlash", () => {
     expect(parseSlash("  /EXIT  ")).toEqual({ kind: "exit" });
   });
 
-  it("handles /clear", () => {
-    expect(parseSlash("/clear")).toEqual({ kind: "clear" });
+  it("handles /clear and /new as a fresh conversation", () => {
+    expect(parseSlash("/clear")).toEqual({ kind: "new" });
+    expect(parseSlash("/new")).toEqual({ kind: "new" });
   });
 
-  it("handles /help with render text", () => {
+  it("handles /sessions", () => {
+    expect(parseSlash("/sessions")).toEqual({ kind: "sessions" });
+  });
+
+  it("handles /retry", () => {
+    expect(parseSlash("/retry")).toEqual({ kind: "retry" });
+  });
+
+  it("handles /think as a toggle", () => {
+    expect(parseSlash("/think")).toEqual({ kind: "toggleThink" });
+  });
+
+  it("handles /help with render text listing the full command set", () => {
     const r = parseSlash("/help");
     expect(r?.kind).toBe("handled");
-    if (r?.kind === "handled") expect(r.render).toContain("/model");
+    if (r?.kind === "handled") {
+      for (const c of ["/model", "/tools", "/sessions", "/new", "/retry", "/think"]) {
+        expect(r.render).toContain(c);
+      }
+    }
   });
 
   it("handles /tools as a bare handled signal", () => {
@@ -36,10 +53,8 @@ describe("parseSlash", () => {
     });
   });
 
-  it("/model with no id is a usage hint, not a setModel", () => {
-    const r = parseSlash("/model");
-    expect(r?.kind).toBe("handled");
-    if (r?.kind === "handled") expect(r.render).toContain("usage");
+  it("/model with no id lists models, not a setModel", () => {
+    expect(parseSlash("/model")).toEqual({ kind: "listModels" });
   });
 
   it("parses /flag and /wrong with and without note", () => {

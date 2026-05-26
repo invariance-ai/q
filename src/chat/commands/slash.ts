@@ -9,15 +9,22 @@ export type SlashResult =
   | { kind: "exit" }
   | { kind: "passthrough" }
   | { kind: "setModel"; model: string }
-  | { kind: "clear" }
+  | { kind: "listModels" }
+  | { kind: "new" }
+  | { kind: "sessions" }
+  | { kind: "retry" }
+  | { kind: "toggleThink" }
   | { kind: "flag"; note?: string };
 
 const HELP_TEXT = [
   "commands:",
-  "  /model <id>   switch the active model",
+  "  /model [id]   show or switch the active model",
   "  /tools        list registered tools",
+  "  /sessions     list recent saved sessions",
+  "  /new          start a fresh conversation (alias /clear)",
+  "  /retry        re-ask the last question",
+  "  /think        toggle extended thinking",
   "  /flag [note]  flag the last answer as wrong (alias /wrong)",
-  "  /clear        clear the conversation",
   "  /help         show this help",
   "  /exit         quit (alias /quit)",
 ].join("\n");
@@ -39,7 +46,17 @@ export function parseSlash(input: string): SlashResult | null {
       return { kind: "exit" };
 
     case "clear":
-      return { kind: "clear" };
+    case "new":
+      return { kind: "new" };
+
+    case "sessions":
+      return { kind: "sessions" };
+
+    case "retry":
+      return { kind: "retry" };
+
+    case "think":
+      return { kind: "toggleThink" };
 
     case "help":
       return { kind: "handled", render: HELP_TEXT };
@@ -49,9 +66,8 @@ export function parseSlash(input: string): SlashResult | null {
       return { kind: "handled" };
 
     case "model":
-      if (rest.length === 0) {
-        return { kind: "handled", render: "usage: /model <id>" };
-      }
+      // No argument: App renders the current model + available list.
+      if (rest.length === 0) return { kind: "listModels" };
       return { kind: "setModel", model: rest };
 
     case "flag":

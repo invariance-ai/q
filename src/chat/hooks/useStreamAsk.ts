@@ -64,6 +64,7 @@ export function useStreamAsk(
     // Snapshot history BEFORE adding the new user turn, then record it.
     const history = getState().history.slice();
     const model = getState().model;
+    const think = getState().think;
     dispatch({ type: "SUBMIT", question: q });
 
     const controller = new AbortController();
@@ -77,6 +78,7 @@ export function useStreamAsk(
           question: q,
           history,
           model,
+          think,
           signal: controller.signal,
         })) {
           switch (ev.type) {
