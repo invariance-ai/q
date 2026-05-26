@@ -71,22 +71,102 @@ export function disablePattern(toolName: string, pattern: string): boolean {
   return changed;
 }
 
-/** Generic, secret-free example tools users can install as a starting point. */
+/**
+ * Built-in example tools — a starting catalog so the registry is never an empty
+ * blank state. Secret-free: keyed tools reference an env var by name only.
+ * `q tools init` scaffolds the ones whose key you already have.
+ */
 export const EXAMPLE_TOOLS: Record<string, ToolEntry> = {
+  // --- No key required (instant, works on a fresh install) ---
   web_fetch: ToolEntrySchema.parse({
     name: "web_fetch",
     description:
       "Fetch the raw contents of a public URL over HTTP GET. Use when the user asks what a specific web page or JSON endpoint returns.",
     url: "{{input.url}}",
     method: "GET",
-    input: {
-      url: {
-        type: "string",
-        description: "The absolute URL to fetch.",
-        required: true,
-      },
-    },
+    input: { url: { type: "string", description: "The absolute URL to fetch.", required: true } },
     match: [],
-    timeoutMs: 15000,
   }),
+  npm: ToolEntrySchema.parse({
+    name: "npm",
+    description: "Latest version and metadata of an npm package.",
+    url: "https://registry.npmjs.org/{{input.pkg}}/latest",
+    method: "GET",
+    input: { pkg: { type: "string", description: "Package name.", required: true } },
+    match: [
+      { pattern: "npm package {pkg}", kind: "phrase", enabled: true },
+      { pattern: "latest version of {pkg}", kind: "phrase", enabled: true },
+    ],
+  }),
+  // --- Keyed (token referenced by env-var name; never stored) ---
+  github: ToolEntrySchema.parse({
+    name: "github",
+    description: "GitHub repository info — description, stars, open issues, default branch.",
+    url: "https://api.github.com/repos/{{input.repo}}",
+    method: "GET",
+    auth: { type: "bearer", envVar: "GITHUB_TOKEN" },
+    input: { repo: { type: "string", description: "owner/name, e.g. facebook/react", required: true } },
+    match: [
+      { pattern: "github repo {repo}", kind: "phrase", enabled: true },
+      { pattern: "repo info for {repo}", kind: "phrase", enabled: true },
+    ],
+  }),
+  vercel: ToolEntrySchema.parse({
+    name: "vercel",
+    description: "Recent Vercel deployments for an app.",
+    url: "https://api.vercel.com/v6/deployments?limit=5&app={{input.app}}",
+    method: "GET",
+    auth: { type: "bearer", envVar: "VERCEL_TOKEN" },
+    input: { app: { type: "string", description: "App/project name.", required: true } },
+    match: [
+      { pattern: "vercel deployments for {app}", kind: "phrase", enabled: true },
+      { pattern: "deploy status for {app}", kind: "phrase", enabled: true },
+    ],
+  }),
+  sentry: ToolEntrySchema.parse({
+    name: "sentry",
+    description: "Unresolved Sentry issues for a project.",
+    url: "https://sentry.io/api/0/projects/{{input.org}}/{{input.project}}/issues/?query=is:unresolved",
+    method: "GET",
+    auth: { type: "bearer", envVar: "SENTRY_AUTH_TOKEN" },
+    input: {
+      org: { type: "string", description: "Sentry org slug.", required: true },
+      project: { type: "string", description: "Project slug.", required: true },
+    },
+    match: [{ pattern: "sentry issues for {project}", kind: "phrase", enabled: true }],
+  }),
+  stripe: ToolEntrySchema.parse({
+    name: "stripe",
+    description: "Stripe account balance (available and pending).",
+    url: "https://api.stripe.com/v1/balance",
+    method: "GET",
+    auth: { type: "bearer", envVar: "STRIPE_SECRET_KEY" },
+    match: [{ pattern: "stripe balance", kind: "phrase", enabled: true }],
+  }),
+  openweather: ToolEntrySchema.parse({
+    name: "openweather",
+    description: "Current weather for a city.",
+    url: "https://api.openweathermap.org/data/2.5/weather?units=metric&q={{input.city}}&appid={{env.OPENWEATHER_API_KEY}}",
+    method: "GET",
+    input: { city: { type: "string", description: "City name.", required: true } },
+    match: [
+      { pattern: "weather in {city}", kind: "phrase", enabled: true },
+      { pattern: "weather for {city}", kind: "phrase", enabled: true },
+    ],
+  }),
+};
+
+/**
+ * Env vars that indicate a catalog tool is usable now (any one present = ready).
+ * An empty list means the tool needs no key. `q tools init` uses this to scaffold
+ * only the tools you can actually run.
+ */
+export const EXAMPLE_DETECT: Record<string, string[]> = {
+  web_fetch: [],
+  npm: [],
+  github: ["GITHUB_TOKEN"],
+  vercel: ["VERCEL_TOKEN"],
+  sentry: ["SENTRY_AUTH_TOKEN"],
+  stripe: ["STRIPE_SECRET_KEY"],
+  openweather: ["OPENWEATHER_API_KEY"],
 };

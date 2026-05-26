@@ -10,6 +10,7 @@ import {
   setToolEnabled,
   getTool,
   EXAMPLE_TOOLS,
+  EXAMPLE_DETECT,
 } from "../tools/registry.js";
 import { executeTool } from "../tools/execute.js";
 import { ToolEntrySchema, type ToolEntry, type ToolMatch } from "../config/schema.js";
@@ -148,8 +149,55 @@ function warnToolConsistency(entry: ToolEntry): void {
   }
 }
 
+/** Is at least one of the tool's detection env vars set (or does it need none)? */
+function detectAvailable(name: string): boolean {
+  const vars = EXAMPLE_DETECT[name] ?? [];
+  if (vars.length === 0) return true;
+  return vars.some((v) => Boolean(process.env[v]));
+}
+
 export function buildToolsCommand(): Command {
   const tools = new Command("tools").description("Register and manage HTTP API tools");
+
+  tools
+    .command("init")
+    .description("Scaffold starter tools from the built-in catalog (adds the ones you have keys for)")
+    .option("--all", "add every catalog tool, even ones missing a key")
+    .action((opts: { all?: boolean }) => {
+      handle(() => {
+        const added: string[] = [];
+        const skipped: { name: string; needs: string }[] = [];
+        const existing = new Set(listToolEntries().map((t) => t.name));
+
+        for (const [name, entry] of Object.entries(EXAMPLE_TOOLS)) {
+          if (existing.has(name)) continue;
+          if (opts.all || detectAvailable(name)) {
+            addTool(entry);
+            added.push(name);
+          } else {
+            skipped.push({ name, needs: (EXAMPLE_DETECT[name] ?? []).join(" or ") });
+          }
+        }
+
+        if (added.length > 0) {
+          process.stdout.write(
+            chalk.green(`added ${added.length} tool(s): `) + added.join(", ") + "\n",
+          );
+        } else {
+          process.stdout.write(chalk.dim("no new tools added (all present or no keys detected)\n"));
+        }
+        if (skipped.length > 0) {
+          process.stdout.write(
+            chalk.dim(`\navailable once you set a key (then re-run q tools init):\n`),
+          );
+          for (const s of skipped) {
+            process.stdout.write(chalk.dim(`  ${s.name.padEnd(12)} set ${s.needs}`) + "\n");
+          }
+          process.stdout.write(chalk.dim(`  …or \`q tools init --all\` to add them anyway.\n`));
+        }
+        process.stdout.write(chalk.dim("\nrun \`q tools list\` to see them, or just ask: q <question>\n"));
+      });
+    });
 
   tools
     .command("list")

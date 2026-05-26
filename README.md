@@ -36,9 +36,13 @@ npm i -g @invariance/q
 Node ≥ 20. This installs a command named **`q`**. If that name is already taken on your `$PATH` (e.g. Amazon Q's `q`), alias it instead — `alias iq='q'` — or rename the symlink npm creates.
 
 ```sh
-export OPENAI_API_KEY=sk-...     # default model is gpt-4o-mini
-q deploy status for checkout-service
+export OPENAI_API_KEY=sk-...     # any provider key works (see `q help keys`)
+q tools init                     # scaffold starter tools from keys you already have
+q latest version of react        # works with zero keys (regex → npm, no model)
+q whats the latest AI news        # web-search answer, with citations
 ```
+
+`q tools init` seeds a starter catalog (npm, web fetch, plus GitHub/Vercel/Sentry/Stripe/OpenWeather for any of those keys you have) so you're never staring at an empty registry.
 
 (Anthropic works too — set `ANTHROPIC_API_KEY` and `q model set claude-opus-4-7`. Provider is inferred from the model id.)
 
