@@ -2,7 +2,6 @@ import chalk from "chalk";
 
 import { buildProgram } from "./cli/program.js";
 import { isReserved } from "./cli/reserved.js";
-import { detectGlobRisk } from "./util/argv.js";
 import { exitCodeFor } from "./util/errors.js";
 
 const HELP_VERSION_FLAGS = new Set(["-h", "--help", "-V", "--version"]);
@@ -35,19 +34,9 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const program = buildProgram();
 
-  // Hint (not an error) when the shell likely expanded a glob in the question,
-  // e.g. `q what files match *.ts`. TTY-only so we never pollute pipes.
-  if (process.stdout.isTTY && detectGlobRisk(argv)) {
-    process.stderr.write(
-      chalk.dim(
-        "hint: a `*`/`?` in your question may have been expanded by your shell. " +
-          'Quote it ("...") or prefix with `noglob`.',
-      ) + "\n",
-    );
-  }
-
-  // Both classifications parse through commander; `freetext` is carried by the
-  // default `[query...]` root argument registered in buildProgram().
+  // Classification is computed for clarity; both paths parse through commander
+  // (a reserved first token → its subcommand, anything else → the `[query...]`
+  // root argument). The shell, not q, handles glob/quote expansion of args.
   void classify(argv);
 
   await program.parseAsync(process.argv);

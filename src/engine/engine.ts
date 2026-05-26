@@ -13,7 +13,14 @@ import type {
 } from "./types.js";
 import { readConfig } from "../config/store.js";
 import { resolveApiKey, resolveModel, resolveFeatures } from "../config/resolve.js";
-import { getProvider, resolveProvider, wireModelId, KNOWN_MODELS } from "../providers/index.js";
+import {
+  getProvider,
+  resolveProvider,
+  wireModelId,
+  KNOWN_MODELS,
+  PROVIDER_NAMES,
+  PROVIDER_ENV_VARS,
+} from "../providers/index.js";
 import { buildSystemPrompt } from "../prompt/system.js";
 import { toProviderTools } from "../tools/to-provider.js";
 import { executeTool, toToolCallRecord } from "../tools/execute.js";
@@ -81,9 +88,27 @@ export function createEngine(deps?: EngineDeps): QEngine {
     const apiKey = resolveApiKey(provider, config);
     const requireKey = (): string => {
       if (!apiKey) {
-        const envVar = provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
+        const envVar = PROVIDER_ENV_VARS[provider]?.[0] ?? `${provider.toUpperCase()}_API_KEY`;
+        // Point the user at providers they already have a key for.
+        const available = PROVIDER_NAMES.filter(
+          (p) => p !== provider && resolveApiKey(p, config),
+        );
+        let suggestion = "";
+        if (available.length > 0) {
+          const example = KNOWN_MODELS.find((m) => {
+            try {
+              return available.includes(resolveProvider(m));
+            } catch {
+              return false;
+            }
+          });
+          suggestion =
+            ` You do have a key for: ${available.join(", ")}` +
+            (example ? ` — try \`q model set ${example}\`.` : ".");
+        }
         throw new ProviderError(
-          `No API key for ${provider}. Set ${envVar} or run \`q config set keys.${provider} <key>\`.`,
+          `No API key for ${provider} (model "${model}"). Set ${envVar}, ` +
+            `or run \`q config set keys.${provider} <key>\`.${suggestion}`,
         );
       }
       return apiKey;

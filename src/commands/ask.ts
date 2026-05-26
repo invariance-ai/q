@@ -55,9 +55,24 @@ function afterResult(result: AskResult, flags: GlobalFlags): void {
   }
 }
 
+/** Read piped stdin (e.g. `git diff | q what changed`); empty on a TTY. */
+async function readPipedStdin(): Promise<string> {
+  if (process.stdin.isTTY) return "";
+  try {
+    const chunks: Buffer[] = [];
+    for await (const c of process.stdin) chunks.push(c as Buffer);
+    return Buffer.concat(chunks).toString("utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
 export async function runAsk(question: string, flags: GlobalFlags): Promise<void> {
   const format = effectiveFormat(flags);
-  const params = toAskParams(question, flags);
+  // Fold any piped input into the question as context.
+  const piped = await readPipedStdin();
+  const fullQuestion = piped ? `${question}\n\n--- piped input ---\n${piped}` : question;
+  const params = toAskParams(fullQuestion, flags);
   const started = Date.now();
 
   // Dry-run is a local inspection; no telemetry, no run-count, no prompt.

@@ -5,11 +5,23 @@ import {
   ConfigSchema,
   FeatureFlagsSchema,
   OutputFormatSchema,
+  ProviderKeysSchema,
   defaultConfig,
   type Config,
 } from "./schema.js";
 import { ConfigError } from "../util/errors.js";
 import { getEnv } from "../util/env.js";
+
+/** Valid `keys.<provider>` names, derived from the schema so it never drifts. */
+const KEY_PROVIDERS = new Set(Object.keys(ProviderKeysSchema.shape));
+
+function assertKeyProvider(sub: string): void {
+  if (!KEY_PROVIDERS.has(sub)) {
+    throw new ConfigError(
+      `Unknown key provider: '${sub}'. Valid: ${[...KEY_PROVIDERS].join(", ")}.`,
+    );
+  }
+}
 
 /**
  * Config store for `q`. Mirrors invariance-cli: atomic temp-rename writes,
@@ -115,10 +127,8 @@ export function getConfigValue(key: string): unknown {
   }
   if (key.startsWith("keys.")) {
     const sub = key.slice("keys.".length);
-    if (sub !== "anthropic" && sub !== "openai") {
-      throw new ConfigError(`Unknown key provider: '${sub}'.`);
-    }
-    return cfg.keys[sub];
+    assertKeyProvider(sub);
+    return (cfg.keys as Record<string, string | undefined>)[sub];
   }
   throw new ConfigError(
     `Unknown config key: '${key}'. Valid: defaultModel, features.<flag>, keys.<provider>.`,
@@ -149,10 +159,8 @@ export function setConfigValue(key: string, value: string): void {
     cfg.features = FeatureFlagsSchema.parse(cfg.features);
   } else if (key.startsWith("keys.")) {
     const sub = key.slice("keys.".length);
-    if (sub !== "anthropic" && sub !== "openai") {
-      throw new ConfigError(`Unknown key provider: '${sub}'.`);
-    }
-    cfg.keys[sub] = value;
+    assertKeyProvider(sub);
+    (cfg.keys as Record<string, string | undefined>)[sub] = value;
   } else {
     throw new ConfigError(
       `Unknown config key: '${key}'. Valid: defaultModel, features.<flag>, keys.<provider>.`,
@@ -180,10 +188,8 @@ export function clearConfigValue(key?: string): void {
     )[sub];
   } else if (key.startsWith("keys.")) {
     const sub = key.slice("keys.".length);
-    if (sub !== "anthropic" && sub !== "openai") {
-      throw new ConfigError(`Unknown key provider: '${sub}'.`);
-    }
-    delete cfg.keys[sub];
+    assertKeyProvider(sub);
+    delete (cfg.keys as Record<string, string | undefined>)[sub];
   } else {
     throw new ConfigError(
       `Unknown config key: '${key}'. Valid: defaultModel, features.<flag>, keys.<provider>.`,

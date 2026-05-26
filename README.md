@@ -42,7 +42,9 @@ q deploy status for checkout-service
 
 (Anthropic works too — set `ANTHROPIC_API_KEY` and `q model set claude-opus-4-7`. Provider is inferred from the model id.)
 
-> **Shell quoting:** bare questions work great, but `zsh`/`bash` treat `?`, `*`, and `'` specially. If your question has those, quote it — `q "what's failing right now?"` — or run `noglob q ...`. `q` prints a hint when it detects an unquoted glob.
+> **Shell quoting:** bare questions work great, but `zsh` treats a trailing `?` or `*` as a filename glob and aborts before `q` runs (`zsh: no matches found`). Fix it once — add `alias q='noglob q'` to your `~/.zshrc` — and `q how does this work?` just works. (Apostrophes still need quotes: `q "what's up"`.)
+>
+> **Pipe input in:** `q` reads stdin, so `git diff | q what's risky here` or `cat error.log | q summarize the failures` folds the piped text into your question.
 
 ## Registering an API as a tool
 
