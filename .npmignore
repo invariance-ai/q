@@ -1,0 +1,11 @@
+src/
+fixtures/
+.github/
+*.test.ts
+*.test.tsx
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+*.tsbuildinfo
+.env
+.env.*
