@@ -97,6 +97,57 @@ function formatEnabled(enabled: boolean): string {
   return enabled ? chalk.green("on ") : chalk.dim("off");
 }
 
+/** `{{input.x}}` names referenced anywhere in the tool's request template. */
+function templateVars(entry: ToolEntry): Set<string> {
+  const out = new Set<string>();
+  const scan = (s: string | undefined): void => {
+    if (!s) return;
+    for (const m of s.matchAll(/\{\{\s*input\.([a-zA-Z0-9_]+)\s*\}\}/g)) out.add(m[1]!);
+  };
+  scan(entry.url);
+  scan(entry.body);
+  for (const v of Object.values(entry.query ?? {})) scan(v);
+  for (const v of Object.values(entry.headers ?? {})) scan(v);
+  return out;
+}
+
+/** Names the tool can actually fill: match captures + declared input params. */
+function satisfiableVars(entry: ToolEntry): Set<string> {
+  const out = new Set<string>(Object.keys(entry.input ?? {}));
+  for (const m of entry.match) {
+    if (m.kind === "regex") {
+      for (const g of m.pattern.matchAll(/\(\?<([a-zA-Z0-9_]+)>/g)) out.add(g[1]!);
+    } else {
+      for (const g of m.pattern.matchAll(/\{([a-zA-Z0-9_]+)\}/g)) out.add(g[1]!);
+    }
+  }
+  if (entry.input?.["query"] || out.size === 0) out.add("query"); // whole-question fallback
+  return out;
+}
+
+/** Print advisory warnings (does not block) after a tool is registered. */
+function warnToolConsistency(entry: ToolEntry): void {
+  const warn = (s: string): void => {
+    process.stderr.write(chalk.yellow(`  ⚠ ${s}`) + "\n");
+  };
+
+  if (entry.auth && !process.env[entry.auth.envVar]) {
+    warn(
+      `auth env var ${entry.auth.envVar} is not set — requests will go out unauthenticated until you export it.`,
+    );
+  }
+
+  const need = templateVars(entry);
+  const have = satisfiableVars(entry);
+  for (const v of need) {
+    if (!have.has(v)) {
+      warn(
+        `template uses {{input.${v}}} but no --match capture or declared input provides "${v}" — it will resolve to empty.`,
+      );
+    }
+  }
+}
+
 export function buildToolsCommand(): Command {
   const tools = new Command("tools").description("Register and manage HTTP API tools");
 
@@ -145,6 +196,7 @@ export function buildToolsCommand(): Command {
         }
         addTool(parsed.data);
         process.stdout.write(chalk.green(`added tool "${parsed.data.name}"`) + "\n");
+        warnToolConsistency(parsed.data);
       });
     });
 
@@ -186,6 +238,12 @@ export function buildToolsCommand(): Command {
       handle(async () => {
         const entry: ToolEntry | undefined = getTool(name);
         if (!entry) throw new ToolError(`no such tool: "${name}"`);
+        if (entry.auth && !process.env[entry.auth.envVar]) {
+          process.stderr.write(
+            chalk.yellow(`⚠ auth env var ${entry.auth.envVar} is not set — sending unauthenticated`) +
+              "\n",
+          );
+        }
         const input = parseKeyValues(opts.input);
 
         process.stdout.write(chalk.dim(`→ ${entry.method} ${redact(entry.url)}`) + "\n");

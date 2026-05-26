@@ -7,17 +7,40 @@ injects auth, so this one ~10-line def replaces N per-endpoint tool schemas.
 
 ## Handler
 
-When the model calls `q_ask`, run `q --json` and return the `answer`:
+When the model calls `q_ask`, run `q --json` and return the `answer`. Handle
+failure explicitly: `q` exits non-zero when it can't answer (no key, no match),
+and a tool-level failure surfaces as `toolCalls[].ok === false` even on a zero
+exit — relaying that blindly would hand the agent an error as if it were the
+answer.
 
 ```js
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 
 function qAsk({ question }) {
-  const out = execFileSync("q", ["--json", question], { encoding: "utf8" });
-  const { answer, toolCalls, routedVia } = JSON.parse(out);
-  return answer; // toolCalls[].tool tells you the source; routedVia is "regex" | "llm"
+  return new Promise((resolve) => {
+    execFile("q", ["--json", question], { encoding: "utf8" }, (err, stdout) => {
+      if (err && !stdout) {
+        resolve(`q failed: ${err.message}`); // non-zero exit, empty stdout
+        return;
+      }
+      let res;
+      try {
+        res = JSON.parse(stdout);
+      } catch {
+        resolve("q returned unparseable output");
+        return;
+      }
+      // A tool call can fail while the process still exits 0 — check `ok`.
+      if (res.toolCalls?.some((t) => t.ok === false)) {
+        resolve(`q tool error: ${res.answer}`);
+        return;
+      }
+      resolve(res.answer); // toolCalls[].tool = source; routedVia = "regex" | "llm"
+    });
+  });
 }
 ```
 
-Requires `q` installed (`npm i -g @invariance/q`) and on `PATH`, with the
-team's endpoints registered (`q tools add …`) and auth env vars set.
+Requires `q` installed (`npm i -g @invariance/q`) and on `PATH` as the literal
+command `q` (a shell `alias` won't work for `execFile`). Register the team's
+endpoints (`q tools add …`) and set their auth env vars.

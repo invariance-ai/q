@@ -11,6 +11,7 @@ import {
   type GlobalFlags,
 } from "../cli/globals.js";
 import { renderAnswer, formatToolEvent } from "../render/output.js";
+import type { AskResult } from "../engine/types.js";
 import { capture, addContext } from "../telemetry/capture.js";
 import { recordRun, shouldPrompt } from "../telemetry/state.js";
 import { maybePromptOptIn } from "../telemetry/prompt.js";
@@ -32,6 +33,26 @@ function shouldStream(flags: GlobalFlags): boolean {
   if (flags.stream === false) return false;
   if (!process.stdout.isTTY) return false;
   return resolveFeatures({ stream: flags.stream }).stream;
+}
+
+/** Post-answer signals: non-zero exit on a failed tool call (so agents/scripts
+ * don't treat an error body as the answer), and a hint when output came back
+ * raw because no key was available to phrase it. */
+function afterResult(result: AskResult, flags: GlobalFlags): void {
+  if (result.toolCalls.some((t) => !t.ok)) {
+    process.exitCode = 1;
+  }
+  if (
+    result.routedVia === "regex" &&
+    result.usage.outputTokens === 0 &&
+    flags.phrase !== false &&
+    !flags.json &&
+    result.toolCalls.every((t) => t.ok)
+  ) {
+    process.stderr.write(
+      chalk.dim("(raw tool output — set an API key for a phrased, cited answer)") + "\n",
+    );
+  }
 }
 
 export async function runAsk(question: string, flags: GlobalFlags): Promise<void> {
@@ -60,6 +81,7 @@ export async function runAsk(question: string, flags: GlobalFlags): Promise<void
     const engine = createEngine();
 
     if (shouldStream(flags)) {
+      let finalResult: AskResult | undefined;
       for await (const event of engine.stream(params)) {
         switch (event.type) {
           case "text_delta":
@@ -73,6 +95,7 @@ export async function runAsk(question: string, flags: GlobalFlags): Promise<void
             break;
           }
           case "done":
+            finalResult = event.result;
             if (event.result) {
               addContext({
                 provider: event.result.provider,
@@ -90,10 +113,12 @@ export async function runAsk(question: string, flags: GlobalFlags): Promise<void
             break;
         }
       }
+      if (finalResult) afterResult(finalResult, flags);
       capture("ask", { command: "ask", ok: true, durationMs: Date.now() - started });
     } else {
       const result = await engine.ask(params);
       process.stdout.write(renderAnswer(result, { format }) + "\n");
+      afterResult(result, flags);
       capture("ask", {
         command: "ask",
         provider: result.provider,
