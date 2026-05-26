@@ -17,6 +17,7 @@ import {
   getProvider,
   resolveProvider,
   wireModelId,
+  modelRejectsTools,
   KNOWN_MODELS,
   PROVIDER_NAMES,
   PROVIDER_ENV_VARS,
@@ -40,6 +41,7 @@ export function createEngine(deps?: EngineDeps): QEngine {
     const overrides: Partial<FeatureFlags> = {};
     if (params.tools !== undefined) overrides.tools = params.tools;
     if (params.think !== undefined) overrides.think = params.think;
+    if (params.web !== undefined) overrides.web = params.web;
     if (params.format !== undefined) overrides.format = params.format;
     return resolveFeatures(overrides, cfg());
   }
@@ -47,17 +49,26 @@ export function createEngine(deps?: EngineDeps): QEngine {
   async function* stream(params: AskParams): AsyncIterable<StreamEvent> {
     const config = cfg();
     const features = effectiveFeatures(params);
-    const model = resolveModel(params.model, config);
     const history: Turn[] = params.history ?? [];
+    const enabledTools = features.tools
+      ? config.tools.filter((t) => t.enabled)
+      : [];
+
+    // Web routing: prefer the web-search model for plain questions (nothing to
+    // call) or when `--web` is explicit. An explicit `-m <model>` wins unless
+    // `--web` was passed.
+    const explicitModel = params.model !== undefined;
+    const wantWeb =
+      params.web === true ||
+      (params.web !== false && features.web && enabledTools.length === 0 && !explicitModel);
+    const model = wantWeb ? config.webModel : resolveModel(params.model, config);
 
     const provider = resolveProvider(model);
     // The wire id drops any leading `provider/` so the API sees the model it expects.
     const wireModel = wireModelId(model);
-    const enabledTools = features.tools
-      ? config.tools.filter((t) => t.enabled)
-      : [];
     const system = buildSystemPrompt({ tools: enabledTools, format: features.format });
-    const toolSpecs = toProviderTools(enabledTools);
+    // Web-search models don't accept function tools; send none to those.
+    const toolSpecs = modelRejectsTools(model) ? [] : toProviderTools(enabledTools);
 
     // --- Dry run: render the plan, no network. ---
     if (params.dryRun) {

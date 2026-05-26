@@ -14,6 +14,7 @@ const FEATURE_KEYS: Record<string, string> = {
   stream: "stream",
   think: "think",
   regexPhraseWithLLM: "regexPhraseWithLLM",
+  web: "web",
 };
 
 function handle(fn: () => void): void {

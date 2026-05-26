@@ -105,6 +105,7 @@ const FEATURE_KEYS = new Set([
   "stream",
   "think",
   "regexPhraseWithLLM",
+  "web",
   "format",
 ]);
 
@@ -118,6 +119,7 @@ function coerceBoolean(key: string, value: string): boolean {
 export function getConfigValue(key: string): unknown {
   const cfg = readConfig();
   if (key === "defaultModel") return cfg.defaultModel;
+  if (key === "webModel") return cfg.webModel;
   if (key.startsWith("features.")) {
     const sub = key.slice("features.".length);
     if (!FEATURE_KEYS.has(sub)) {
@@ -139,6 +141,8 @@ export function setConfigValue(key: string, value: string): void {
   const cfg = readConfig();
   if (key === "defaultModel") {
     cfg.defaultModel = value;
+  } else if (key === "webModel") {
+    cfg.webModel = value;
   } else if (key.startsWith("features.")) {
     const sub = key.slice("features.".length);
     if (!FEATURE_KEYS.has(sub)) {
@@ -178,6 +182,8 @@ export function clearConfigValue(key?: string): void {
   const def = defaultConfig();
   if (key === "defaultModel") {
     cfg.defaultModel = def.defaultModel;
+  } else if (key === "webModel") {
+    cfg.webModel = def.webModel;
   } else if (key.startsWith("features.")) {
     const sub = key.slice("features.".length);
     if (!FEATURE_KEYS.has(sub)) {

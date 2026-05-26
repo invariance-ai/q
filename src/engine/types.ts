@@ -57,6 +57,8 @@ export interface AskParams {
   dryRun?: boolean;
   /** Override regex-fast-path LLM phrasing for this call. */
   phrase?: boolean;
+  /** Force (true) or disable (false) the web-search model for this call. */
+  web?: boolean;
 }
 
 export interface DryRunInfo {

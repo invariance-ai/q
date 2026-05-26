@@ -105,6 +105,24 @@ Register your internal APIs in `q` once, then hand any agent a **single** tool �
 - **Any MCP client** (Claude Desktop, …) — one-file stdio server: [`examples/mcp/`](./examples/mcp/)
 - **OpenAI / Codex** — ~10-line function tool def: [`examples/codex/`](./examples/codex/)
 
+## Current info (web search, on by default)
+
+Plain questions are answered by a **web-search model by default**, so current
+events and "what's the date" just work, with citations:
+
+```sh
+q whats the latest on the openai funding round    # live, cited
+q --no-web explain promise.allSettled             # skip search, plain model
+q -m sonar-pro <question>                          # Perplexity, if you have a key
+```
+
+Defaults: `webModel = gpt-4o-mini-search-preview` (works with your OpenAI key).
+When you've **registered internal-API tools**, those take priority (tool-calling
+needs a regular model); use `--web` to force a web answer. Turn the default off
+with `q feature web off`. Other web backends: set `q config set webModel sonar`
+(Perplexity), or register a search API like [Nia](https://www.trynia.ai/) as a
+normal tool for deep research.
+
 ## General questions & chat
 
 `q` also answers ordinary questions (no tools required), and `--json` makes it scriptable:

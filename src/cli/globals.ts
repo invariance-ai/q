@@ -20,6 +20,8 @@ export interface GlobalFlags {
   dryRun?: boolean;
   /** From `--phrase` / `--no-phrase` (regex fast-path LLM phrasing). */
   phrase?: boolean;
+  /** From `--web` / `--no-web` (use a web-search model for this question). */
+  web?: boolean;
 }
 
 /**
@@ -38,7 +40,9 @@ export function addGlobalOptions(cmd: Command): Command {
     .option("--json", "shorthand for --format json")
     .option("--dry-run", "render the prompt + planned calls without calling the network")
     .option("--no-phrase", "skip LLM phrasing of regex fast-path results")
-    .option("--phrase", "phrase regex fast-path results through the LLM");
+    .option("--phrase", "phrase regex fast-path results through the LLM")
+    .option("--web", "answer using a web-search model (current info, citations)")
+    .option("--no-web", "do not use the web-search model");
 }
 
 /**
@@ -62,6 +66,7 @@ export function collectGlobalFlags(cmd: Command): GlobalFlags {
   if (wasSet("stream")) flags.stream = opts.stream;
   if (wasSet("think")) flags.think = opts.think;
   if (wasSet("phrase")) flags.phrase = opts.phrase;
+  if (wasSet("web")) flags.web = opts.web;
   if (wasSet("format") && opts.format !== undefined) flags.format = opts.format;
   if (wasSet("json")) flags.json = opts.json;
   if (wasSet("dryRun")) flags.dryRun = opts.dryRun;
@@ -87,6 +92,7 @@ export function toAskParams(question: string, flags: GlobalFlags): AskParams {
   if (flags.tools !== undefined) params.tools = flags.tools;
   if (flags.think !== undefined) params.think = flags.think;
   if (flags.phrase !== undefined) params.phrase = flags.phrase;
+  if (flags.web !== undefined) params.web = flags.web;
   if (flags.dryRun) params.dryRun = true;
 
   const format = resolveFormat(flags);

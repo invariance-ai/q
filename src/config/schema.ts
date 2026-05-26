@@ -102,6 +102,8 @@ export const FeatureFlagsSchema = z.object({
   think: z.boolean().default(false),
   /** After a regex fast-path hit, pass the tool result through the LLM to phrase it. */
   regexPhraseWithLLM: z.boolean().default(true),
+  /** Prefer a web-search model for plain questions (when no internal tools apply). */
+  web: z.boolean().default(true),
   format: OutputFormatSchema.default("markdown"),
 });
 export type FeatureFlags = z.infer<typeof FeatureFlagsSchema>;
@@ -144,6 +146,8 @@ export const ConfigSchema = z
   .object({
     version: z.literal(1).default(1),
     defaultModel: z.string().default(DEFAULT_MODEL),
+    /** Model used for web-backed answers (must be a web-search-capable model). */
+    webModel: z.string().default("gpt-4o-mini-search-preview"),
     features: FeatureFlagsSchema.prefault({}),
     tools: z.array(ToolEntrySchema).default([]),
     /**

@@ -63,6 +63,8 @@ export const KNOWN_MODELS: string[] = [
   "gpt-4o-mini",
   "gpt-4o",
   "o4-mini",
+  "gpt-4o-mini-search-preview",
+  "gpt-4o-search-preview",
   "claude-opus-4-7",
   "claude-sonnet-4-6",
   "claude-haiku-4-5",
@@ -78,6 +80,16 @@ export const KNOWN_MODELS: string[] = [
 
 function isProviderName(s: string): s is ProviderName {
   return (PROVIDER_NAMES as string[]).includes(s);
+}
+
+/**
+ * Web-search-capable models that have built-in search but do NOT accept
+ * function/tool definitions (OpenAI *-search-preview, Perplexity sonar/pplx).
+ * The engine sends no tools to these.
+ */
+export function modelRejectsTools(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  return id.includes("search-preview") || /(^|\/)sonar/.test(id) || id.includes("pplx");
 }
 
 /**
