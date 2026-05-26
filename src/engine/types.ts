@@ -64,6 +64,12 @@ export interface AskResult {
   toolCalls: ToolCallRecord[];
   /** Which routing path produced the answer. */
   routedVia: "llm" | "regex";
+  /**
+   * Set when the answer is NOT trustworthy because a tool call failed (HTTP
+   * error, blocked SSRF target, timeout). Agents/scripts should treat a present
+   * `error` (and the non-zero CLI exit) as "no real answer", not relay `answer`.
+   */
+  error?: string;
   /** Populated when the regex fast-path matched (for the "→ matched" indicator and `q flag`). */
   matchedPattern?: string;
   matchedTool?: string;

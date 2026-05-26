@@ -160,6 +160,8 @@ export function createEngine(deps?: EngineDeps): QEngine {
           routedVia: "regex",
           matchedPattern: hit.pattern,
           matchedTool: hit.tool.name,
+          // The answer is only trustworthy if the tool call actually succeeded.
+          ...(execResult.ok ? {} : { error: execResult.body }),
         };
         recordLastRun(toLastRun(params.question, result));
         yield { type: "done", result };
