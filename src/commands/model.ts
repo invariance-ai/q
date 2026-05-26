@@ -46,6 +46,15 @@ export function buildModelCommand(): Command {
         }
         setConfigValue("defaultModel", id);
         process.stdout.write(chalk.green(`default model set to ${id} (${provider})`) + "\n");
+        // We can resolve a provider from the id prefix but can't verify the
+        // model exists at that provider — warn so a later 404 isn't a surprise.
+        if (!KNOWN_MODELS.includes(id)) {
+          process.stderr.write(
+            chalk.yellow(
+              `note: "${id}" isn't in the known-models list; if it's a typo, requests will fail. See \`q model list\`.`,
+            ) + "\n",
+          );
+        }
       });
     });
 

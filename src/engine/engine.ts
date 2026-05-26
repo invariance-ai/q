@@ -73,16 +73,21 @@ export function createEngine(deps?: EngineDeps): QEngine {
       return;
     }
 
+    // Resolve the key lazily: detecting a regex match and answering
+    // deterministically (`--no-phrase`) need no API key at all, so we only
+    // require one when we actually have to call the model.
     const apiKey = resolveApiKey(provider, config);
-    if (!apiKey) {
-      const envVar =
-        provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
-      throw new ProviderError(
-        `No API key for ${provider}. Set ${envVar} or run \`q config set keys.${provider} <key>\`.`,
-      );
-    }
+    const requireKey = (): string => {
+      if (!apiKey) {
+        const envVar = provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
+        throw new ProviderError(
+          `No API key for ${provider}. Set ${envVar} or run \`q config set keys.${provider} <key>\`.`,
+        );
+      }
+      return apiKey;
+    };
 
-    // --- Regex fast-path. ---
+    // --- Regex fast-path. Detection + deterministic answers need no key. ---
     if (features.tools && enabledTools.length > 0) {
       const hit = matchTools(params.question, enabledTools);
       if (hit) {
@@ -102,13 +107,16 @@ export function createEngine(deps?: EngineDeps): QEngine {
         });
         yield { type: "tool_call_end", record };
 
-        const phrase = params.phrase ?? features.regexPhraseWithLLM;
+        // Phrase via the model only when requested AND a key is available;
+        // otherwise answer deterministically from the tool body (works offline).
+        const wantPhrase = params.phrase ?? features.regexPhraseWithLLM;
+        const phrase = wantPhrase && Boolean(apiKey);
         let answer: string;
         const usage: Usage = { inputTokens: 0, outputTokens: 0 };
 
         if (phrase) {
           // Pass the tool result through the LLM to phrase a natural answer.
-          const provInst = getProvider(model, apiKey);
+          const provInst = getProvider(model, requireKey());
           const phraseSystem = buildSystemPrompt({
             tools: enabledTools,
             format: features.format,
@@ -159,9 +167,9 @@ export function createEngine(deps?: EngineDeps): QEngine {
       }
     }
 
-    // --- LLM path. ---
+    // --- LLM path (no fast-path match): requires a key. ---
     yield { type: "routed", via: "llm" };
-    const providerInstance = getProvider(model, apiKey);
+    const providerInstance = getProvider(model, requireKey());
     const gen = runLoop({
       provider: providerInstance,
       model,

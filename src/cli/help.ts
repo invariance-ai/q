@@ -17,10 +17,10 @@ function quickstart(): string {
   const ex = (cmd: string, note: string) => `  ${brand(cmd.padEnd(34))} ${chalk.dim(note)}`;
   return [
     head,
-    ex("q what is the NIS score", "one-shot question"),
+    ex("q deploy status for checkout", "ask in plain English"),
+    ex("q tools add --name ... --url ...", "register an internal API"),
     ex("q chat", "interactive session"),
-    ex("q tools add --example web_fetch", "register an HTTP tool"),
-    ex("q flag", "mark the last answer wrong"),
+    ex("q flag", "fix a wrong answer"),
   ].join("\n");
 }
 
