@@ -37,9 +37,9 @@ export type ChatAction =
   | { type: "SET_MODEL"; model: string }
   | { type: "CLEAR" };
 
-export function initialChatState(model: string): ChatState {
+export function initialChatState(model: string, initialHistory: Turn[] = []): ChatState {
   return {
-    history: [],
+    history: initialHistory,
     phase: "idle",
     streamingBuffer: "",
     activeTool: null,
@@ -167,7 +167,9 @@ export interface UseChatSession {
   dispatch: Dispatch<ChatAction>;
 }
 
-export function useChatSession(model: string): UseChatSession {
-  const [state, dispatch] = useReducer(chatReducer, model, initialChatState);
+export function useChatSession(model: string, initialHistory: Turn[] = []): UseChatSession {
+  const [state, dispatch] = useReducer(chatReducer, undefined, () =>
+    initialChatState(model, initialHistory),
+  );
   return { state, dispatch };
 }

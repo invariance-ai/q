@@ -104,6 +104,27 @@ export const ProviderKeysSchema = z.object({
 });
 export type ProviderKeys = z.infer<typeof ProviderKeysSchema>;
 
+/**
+ * Opt-in, anonymous telemetry state. OFF by default. The prompt is shown at
+ * most a few times in an interactive terminal; once the user enables OR
+ * dismisses it, `q` never asks again (`dismissed` / `enabled`).
+ */
+export const TelemetrySchema = z.object({
+  enabled: z.boolean().default(false),
+  /** User declined / X'd out the opt-in prompt — never ask again. */
+  dismissed: z.boolean().default(false),
+  /** Random, non-identifying id; only set once telemetry is enabled. */
+  anonId: z.string().optional(),
+  /** How many times we've shown the opt-in prompt. */
+  promptCount: z.number().int().nonnegative().default(0),
+  /** Epoch ms of the last prompt and first run (for spacing the asks). */
+  lastPromptAt: z.number().int().optional(),
+  firstRunAt: z.number().int().optional(),
+  /** Successful invocations seen (gates the first prompt). */
+  runCount: z.number().int().nonnegative().default(0),
+});
+export type TelemetryState = z.infer<typeof TelemetrySchema>;
+
 export const ConfigSchema = z
   .object({
     version: z.literal(1).default(1),
@@ -115,6 +136,7 @@ export const ConfigSchema = z
      * write env-sourced keys back to disk implicitly.
      */
     keys: ProviderKeysSchema.default({}),
+    telemetry: TelemetrySchema.prefault({}),
   })
   .strict();
 export type Config = z.infer<typeof ConfigSchema>;

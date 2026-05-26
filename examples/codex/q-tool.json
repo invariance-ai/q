@@ -1,0 +1,18 @@
+{
+  "type": "function",
+  "function": {
+    "name": "q_ask",
+    "description": "Ask the team's internal APIs (metrics, deploy status, on-call, feature flags, health/NIS scores) in plain English. q routes the question to the right internal endpoint and injects auth; you do not need endpoint URLs or schemas. Use for live, private, or account-specific data — not general knowledge.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "The question to answer, in plain English (e.g. 'deploy status for checkout-service')."
+        }
+      },
+      "required": ["question"],
+      "additionalProperties": false
+    }
+  }
+}

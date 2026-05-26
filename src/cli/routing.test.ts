@@ -19,7 +19,7 @@ describe("reserved tokens", () => {
 
   it("RESERVED set matches the documented contract", () => {
     expect([...RESERVED].sort()).toEqual(
-      ["ask", "chat", "config", "feature", "flag", "help", "model", "tools"].sort(),
+      ["ask", "chat", "config", "feature", "flag", "help", "model", "tools", "sessions", "telemetry"].sort(),
     );
   });
 });

@@ -11,6 +11,9 @@ import {
   type GlobalFlags,
 } from "../cli/globals.js";
 import { renderAnswer, formatToolEvent } from "../render/output.js";
+import { capture, addContext } from "../telemetry/capture.js";
+import { recordRun, shouldPrompt } from "../telemetry/state.js";
+import { maybePromptOptIn } from "../telemetry/prompt.js";
 import { Command } from "commander";
 
 /** Effective output format for the run (`--json` wins over `--format`). */
@@ -34,17 +37,27 @@ function shouldStream(flags: GlobalFlags): boolean {
 export async function runAsk(question: string, flags: GlobalFlags): Promise<void> {
   const format = effectiveFormat(flags);
   const params = toAskParams(question, flags);
+  const started = Date.now();
+
+  // Dry-run is a local inspection; no telemetry, no run-count, no prompt.
+  if (flags.dryRun) {
+    try {
+      const engine = createEngine();
+      const result = await engine.ask({ ...params, dryRun: true });
+      const info = result.dryRun ?? { system: "", messages: [], tools: [] };
+      process.stdout.write(JSON.stringify(info, null, 2) + "\n");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(chalk.red(`error: ${message}`) + "\n");
+      process.exitCode = exitCodeFor(err);
+    }
+    return;
+  }
+
+  recordRun();
 
   try {
     const engine = createEngine();
-
-    if (flags.dryRun) {
-      const result = await engine.ask({ ...params, dryRun: true });
-      // Always emit the dry-run plan as JSON so it can be inspected/piped.
-      const info = result.dryRun ?? { system: "", messages: [], tools: [] };
-      process.stdout.write(JSON.stringify(info, null, 2) + "\n");
-      return;
-    }
 
     if (shouldStream(flags)) {
       for await (const event of engine.stream(params)) {
@@ -60,6 +73,13 @@ export async function runAsk(question: string, flags: GlobalFlags): Promise<void
             break;
           }
           case "done":
+            if (event.result) {
+              addContext({
+                provider: event.result.provider,
+                model: event.result.model,
+                routedVia: event.result.routedVia,
+              });
+            }
             process.stdout.write("\n");
             break;
           case "error":
@@ -70,15 +90,34 @@ export async function runAsk(question: string, flags: GlobalFlags): Promise<void
             break;
         }
       }
-      return;
+      capture("ask", { command: "ask", ok: true, durationMs: Date.now() - started });
+    } else {
+      const result = await engine.ask(params);
+      process.stdout.write(renderAnswer(result, { format }) + "\n");
+      capture("ask", {
+        command: "ask",
+        provider: result.provider,
+        model: result.model,
+        routedVia: result.routedVia,
+        ok: true,
+        durationMs: Date.now() - started,
+      });
     }
-
-    const result = await engine.ask(params);
-    process.stdout.write(renderAnswer(result, { format }) + "\n");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     process.stderr.write(chalk.red(`error: ${message}`) + "\n");
     process.exitCode = exitCodeFor(err);
+    capture("ask", {
+      command: "ask",
+      ok: false,
+      errorKind: err instanceof Error ? err.name : "Error",
+      durationMs: Date.now() - started,
+    });
+  }
+
+  // After a normal interactive run, occasionally offer the telemetry opt-in.
+  if (!flags.json && shouldPrompt()) {
+    await maybePromptOptIn();
   }
 }
 

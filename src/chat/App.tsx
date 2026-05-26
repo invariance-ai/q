@@ -1,6 +1,6 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Box, Text, useApp, useInput } from "ink";
-import type { QEngine } from "../engine/types.js";
+import type { QEngine, Turn } from "../engine/types.js";
 import { makeTheme } from "./theme.js";
 import { parseSlash } from "./commands/slash.js";
 import { useChatSession, type ChatState } from "./hooks/useChatSession.js";
@@ -17,6 +17,10 @@ export interface AppProps {
   tools: { name: string; description?: string }[];
   /** Optional hook for /flag; falls back to a dynamic feedback import. */
   onFlag?: (note?: string) => void;
+  /** Seed the conversation (used by `q chat --resume/--continue`). */
+  initialHistory?: Turn[];
+  /** Persist committed turns + current model (debounced by React renders). */
+  onPersist?: (turns: Turn[], model: string) => void;
 }
 
 /**
@@ -30,10 +34,20 @@ export function App({
   models,
   tools,
   onFlag,
+  initialHistory,
+  onPersist,
 }: AppProps): React.JSX.Element {
   const { exit } = useApp();
   const theme = makeTheme();
-  const { state, dispatch } = useChatSession(initialModel);
+  const { state, dispatch } = useChatSession(initialModel, initialHistory ?? []);
+
+  // Persist the transcript whenever committed history changes (idle = a turn
+  // just completed). Cheap: only writes when not mid-stream.
+  useEffect(() => {
+    if (onPersist && state.phase === "idle" && state.history.length > 0) {
+      onPersist(state.history, state.model);
+    }
+  }, [state.history, state.model, state.phase, onPersist]);
 
   // Keep a live ref so the stream hook reads current state without re-binding.
   const stateRef = useRef<ChatState>(state);

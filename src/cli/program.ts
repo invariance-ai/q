@@ -10,6 +10,8 @@ import { buildToolsCommand } from "../commands/tools.js";
 import { buildFeatureCommand } from "../commands/feature.js";
 import { buildFlagCommand } from "../commands/flag.js";
 import { buildChatCommand } from "../commands/chat.js";
+import { buildSessionsCommand } from "../commands/sessions.js";
+import { buildTelemetryCommand } from "../commands/telemetry.js";
 import { joinQuery } from "../util/argv.js";
 
 /**
@@ -39,6 +41,8 @@ export function buildProgram(): Command {
   program.addCommand(buildFeatureCommand());
   program.addCommand(buildFlagCommand());
   program.addCommand(buildChatCommand());
+  program.addCommand(buildSessionsCommand());
+  program.addCommand(buildTelemetryCommand());
 
   // Explicit `ask <words...>`.
   registerAskCommand(program);

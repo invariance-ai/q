@@ -1,142 +1,152 @@
+<div align="center">
+
 # q
 
-**Ask a question in your terminal and get the answer back.**
+**Turn your internal APIs into instant terminal answers.**
 
-```sh
-q what is the capital of France
-# Paris
+</div>
+
+```console
+$ q nis score for last week's deploy
+0.82 — up from 0.74   ·  source: nis_score
 ```
 
-`q` routes your question through an LLM (Anthropic or OpenAI) that can call **your own HTTP APIs** as tools — so `q what is the NIS score?` can hit your internal endpoint and answer in plain language. No quotes required, multi-provider with a switchable default model, a deterministic regex/phrase fast-path, a feedback loop, and a polished interactive chat mode.
+You registered the `nis_score` endpoint once. Now anyone on the team asks for it in plain English and gets the number back — **with zero LLM latency**, because the question matched a pattern and went straight to your API. When nothing matches, a model handles it instead.
 
----
+That's the whole idea: the metrics, deploy status, on-call info, and feature-flag lookups that today live behind a dozen half-remembered `curl` commands and dashboards become one thing you can just *ask*.
+
+```console
+$ q tools add \
+    --name nis_score \
+    --desc "NIS score for a deploy or entity" \
+    --url 'https://api.internal.example.com/nis?entity={{input.entity}}' \
+    --auth-type bearer --auth-env NIS_API_TOKEN \
+    --match 'nis score for {entity}'
+
+$ q nis score for checkout-service     # → calls your API directly, no model in the loop
+$ q which deploy regressed nis this week?   # → no pattern match, so the model reasons over your tools
+```
 
 ## Install
 
 ```sh
-npm i -g @invariance/q     # or: pnpm add -g @invariance/q
+npm i -g @invariance/q
 ```
 
-Requires Node ≥ 20. The command is `q`.
-
-## Quickstart
+Node ≥ 20. Set a key and go:
 
 ```sh
-export OPENAI_API_KEY=sk-...        # or ANTHROPIC_API_KEY
-q what is 2 plus 2                  # one-shot, no quotes needed
-q chat                             # interactive chat window
-q tools add --example web_fetch    # register an HTTP tool
-q --json what is the capital of France   # structured output for scripts
+export OPENAI_API_KEY=sk-...     # default model is gpt-4o-mini
+q nis score for checkout-service
 ```
 
-> **zsh tip:** a trailing `?` is a glob in zsh. Use `q "what is the NIS score?"`, run `noglob q ...`, or add `alias q='noglob q'` to your `~/.zshrc`.
+(Anthropic works too — set `ANTHROPIC_API_KEY` and `q model set claude-opus-4-7`. The provider is inferred from the model id.)
 
-## Configuration
+## Registering an API as a tool
 
-Keys are read from the **environment first**, then an optional config file at `~/.config/q/config.json` (honors `$XDG_CONFIG_HOME`; written `0600`). Environment keys are never written to disk.
-
-| Provider  | Environment variable |
-|-----------|----------------------|
-| Anthropic | `ANTHROPIC_API_KEY`  |
-| OpenAI    | `OPENAI_API_KEY`     |
-
-```sh
-q config set keys.openai sk-...    # optional: store a key in the config file
-q config get keys.openai           # values are redacted on display
-q config path                      # where the config lives
-q config list
-```
-
-## Models
-
-```sh
-q model                  # show the current default + provider
-q model list             # known models
-q model set claude-opus-4-7
-q -m gpt-4o what changed in this repo   # per-question override
-```
-
-The provider is inferred from the model id (`claude*`/`anthropic*` → Anthropic, `gpt*`/`o*` → OpenAI). Default model: `gpt-4o-mini`.
-
-## Tools — let `q` call your APIs
-
-Register any HTTP endpoint as a tool. The LLM decides when to call it based on the description; the response feeds back into the answer.
+A tool is an HTTP endpoint plus a one-line description of when to use it. The model reads the description to decide when to call it; you read the response in plain language.
 
 ```sh
 q tools add \
-  --name nis_score \
-  --desc "Look up the NIS score for a deploy or entity" \
-  --url 'https://api.internal.example.com/nis?entity={{input.entity}}' \
+  --name deploy_status \
+  --desc "Current status of a service's latest deploy" \
+  --url 'https://api.internal.example.com/deploys/{{input.service}}/latest' \
   --method GET \
-  --auth-type bearer --auth-env NIS_API_TOKEN \
-  --match 'nis score for {entity}'
-
-q "what is the nis score for last week's deploy"
+  --auth-type bearer --auth-env DEPLOY_API_TOKEN \
+  --match 'deploy status for {service}'
 ```
 
-- **Templates:** `url`, `query`, `headers`, and `body` support `{{input.x}}` and `{{env.X}}`.
-- **Auth:** `--auth-type bearer|header --auth-env NIS_API_TOKEN` injects the secret from that env var at call time (never stored).
-- Manage tools: `q tools list | test <name> --input k=v | enable <name> | disable <name> | remove <name>`.
+- **Templates** — `url`, `query`, `headers`, and `body` interpolate `{{input.x}}` (filled by a pattern or the model) and `{{env.X}}` (your environment).
+- **Auth** — `--auth-type bearer|header --auth-env DEPLOY_API_TOKEN` reads the token from that env var at call time. The token is **never stored** — only the variable's name is.
+- **Manage** — `q tools list · test <name> --input k=v · enable · disable · remove`.
 
-See `q help tools` for the full reference.
+Full reference: `q help tools`.
 
-## Regex / phrase fast-path
+## Zero-latency routing (the `--match` part)
 
-Give a tool a `--match` pattern and matching questions route **directly** to it — deterministic, no LLM round-trip:
+A `--match` pattern sends a matching question straight to the tool — no model round-trip to decide *which* tool, no model latency at all if you don't want it.
 
 ```sh
---match 'nis score for {entity}'          # phrase: {name} → captured input
---match '/^deploy (?<id>\d+)$/'           # raw regex with named groups
+--match 'deploy status for {service}'     # phrase: {name} captures an input
+--match '/^nis (?<entity>[\w-]+)$/'       # raw regex with named groups
 ```
 
-By default the raw tool result is phrased by the LLM; `--no-phrase` (or `q feature regexPhraseWithLLM off`) returns the raw result with zero LLM calls. See `q help regex`.
+Phrase patterns are forgiving — case-insensitive, whitespace-tolerant, trailing punctuation ignored. By default the raw API response is phrased into a sentence by the model; add `--no-phrase` (or `q feature regexPhraseWithLLM off`) to return the raw result with **zero LLM calls** — fully deterministic, works offline. Details: `q help regex`.
 
-## Flag a wrong match
+When a question *doesn't* match any pattern, `q` hands it to the model with your tools available, and the model picks one if it helps. Either way you get an answer; the cite line (`source: <tool>`) tells you where it came from.
 
-If `q` routed a question to the wrong tool/pattern, correct it:
+### Got a wrong match? Fix it.
 
 ```sh
-q flag the place lookup was wrong       # logs feedback on the last answer
-q flag --disable-pattern                # also disable the pattern that matched
-q flag --right                          # positive signal
+q flag the deploy lookup hit the wrong service   # log it
+q flag --disable-pattern                         # and stop that pattern from matching
 ```
 
-Feedback is stored locally in `~/.config/q/feedback.jsonl`.
+## Use q from your agents
 
-## Chat mode
+Register your internal APIs in `q` once, then hand any agent a **single** tool —
+`q(question)` — instead of writing one MCP/tool schema per endpoint. The agent
+asks in plain English; `q` picks the endpoint, injects auth, and returns the
+answer. No endpoint schemas leak to the agent, and common queries skip the model
+entirely via the regex fast-path.
 
-Run `q` with no arguments (or `q chat`) for a multi-turn session with live streaming, tool-call indicators, and slash commands:
+`q --json` gives you the structured `answer` plus the `toolCalls` to cite. Wire
+it up in a few lines:
 
-```
-/model <id>   switch model      /tools   list tools
-/flag [note]  flag last answer  /clear   reset history
-/help                           /exit
-```
+- **Claude Code** — drop-in skill: [`examples/claude-code-skill/`](./examples/claude-code-skill/)
+- **Any MCP client** (Claude Desktop, …) — one-file stdio server: [`examples/mcp/`](./examples/mcp/)
+- **OpenAI / Codex** — ~10-line function tool def: [`examples/codex/`](./examples/codex/)
 
-## Feature toggles
+## General questions & chat
+
+`q` answers ordinary questions too (no tools required):
 
 ```sh
-q feature list
-q feature tools off            # disable tool-calling (pure LLM Q&A)
-q feature stream off           # disable token streaming
-q feature think on             # extended thinking
-q feature format json          # default output format
+q explain this regex: '^\d{3}-\d{4}$'
+q --json what is the capital of France     # structured output for scripts
 ```
 
-Per-question flags: `--no-tools`, `--no-stream`, `--think/--no-think`, `--format <markdown|text|json>`, `--json`, `--dry-run`.
-
-## Security
-
-`q` redacts high-confidence secrets (API keys, tokens, `Authorization` headers) from anything it prints or logs. Provider keys read from the environment are never persisted. Tool auth tokens are referenced by env-var name, never stored in the config.
-
-## Development
+Run `q` with no arguments (or `q chat`) for a multi-turn session with live streaming and slash commands (`/model`, `/tools`, `/flag`, `/clear`, `/help`, `/exit`). Conversations are saved locally and resumable:
 
 ```sh
-pnpm install
-pnpm typecheck && pnpm test && pnpm build
-node dist/index.js what is 2+2
+q sessions list            # recent chats: when · model · first message
+q sessions show <id>       # print a transcript
+q chat --continue          # pick up the most recent conversation
+q chat --resume <id>       # resume a specific one
 ```
 
-## License
+## Configuration
 
-MIT © Invariance. See [LICENSE](./LICENSE).
+Keys are read from the environment first, then an optional `~/.config/q/config.json` (created `0600`). Keys found in the environment are never written to disk.
+
+```sh
+q config set keys.openai sk-...   # optional; env vars always win
+q config path                     # where settings live
+q config list                     # everything, secrets redacted
+```
+
+Feature toggles (each has a matching per-question flag):
+
+```sh
+q feature tools off        # pure Q&A, no tool-calling      (--no-tools)
+q feature stream off       # don't stream tokens            (--no-stream)
+q feature format json      # default output format          (--format / --json)
+```
+
+## Privacy
+
+Anonymous usage telemetry is **opt-in and off by default**. `q` asks once, politely, and never again if you decline. Toggle anytime with `q telemetry on|off|status`; hard-disable with `Q_NO_TELEMETRY=1`. It never sends your questions, answers, tool URLs, responses, or keys — only coarse things like which command ran and whether routing was regex or model. See `q help telemetry`.
+
+`q` also redacts API keys and bearer tokens from anything it prints or logs.
+
+## Help
+
+```sh
+q help                 # overview + quickstart
+q help tools           # registering APIs, auth, inputs
+q help regex           # match patterns and {placeholders}
+```
+
+---
+
+MIT licensed. Built by [Invariance](https://github.com/invariance-ai). Contributions welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).

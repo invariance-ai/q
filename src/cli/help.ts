@@ -125,12 +125,30 @@ const TOPICS: Record<string, () => string> = {
       "Env-sourced keys are never written back to disk. `q config list` and",
       "`q config get` redact secrets in their output.",
     ].join("\n"),
+  telemetry: () =>
+    [
+      chalk.bold("Anonymous, opt-in telemetry"),
+      "",
+      "Telemetry is OFF by default. q asks once, politely, and never again if you",
+      "decline. Control it anytime:",
+      "  q telemetry on | off | status",
+      "",
+      chalk.bold("What is sent (only when enabled):"),
+      "  a random anon id, which command ran, regex-vs-model routing, provider,",
+      "  model, q version, OS, and coarse timing/error class.",
+      chalk.bold("What is never sent:"),
+      "  your questions or answers, tool URLs or responses, file contents,",
+      "  environment variables, or API keys.",
+      "",
+      "Hard-disable regardless of config: set Q_NO_TELEMETRY=1 (or DO_NOT_TRACK=1).",
+      "Events are appended to an insert-only table; the embedded key cannot read them.",
+    ].join("\n"),
 };
 
 export function registerHelpTopics(program: Command): void {
   program
     .command("help [topic]")
-    .description("Show help, or a deep-dive on: tools, regex, models, keys")
+    .description("Show help, or a deep-dive on: tools, regex, models, keys, telemetry")
     .action((topic?: string) => {
       if (!topic) {
         program.outputHelp();

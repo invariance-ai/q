@@ -10,6 +10,8 @@ export const RESERVED = new Set([
   "feature",
   "flag",
   "chat",
+  "sessions",
+  "telemetry",
   "help",
 ]);
 
