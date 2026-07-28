@@ -5,7 +5,6 @@ import type { QEngine, StreamEvent, AskParams, AskResult } from "../../engine/ty
 
 // Tests run with FORCE_COLOR=0/NO_COLOR=1, so frames are already plain; this is
 // a defensive stripper in case a terminal still injects escapes.
-// eslint-disable-next-line no-control-regex
 const ANSI = /\[[0-9;]*m/g;
 const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
@@ -29,9 +28,7 @@ function makeMockEngine(reply = "Hello from q"): QEngine {
   return {
     stream: (params) => script(params),
     ask: async (params) => {
-      let answer = "";
       for await (const ev of script(params)) {
-        if (ev.type === "text_delta") answer += ev.text;
         if (ev.type === "done") return ev.result;
       }
       throw new Error("no done");
