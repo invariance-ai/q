@@ -33,6 +33,14 @@
   ],
   "author": "Invariance",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/invariance-ai/q.git"
+  },
+  "bugs": {
+    "url": "https://github.com/invariance-ai/q/issues"
+  },
+  "homepage": "https://github.com/invariance-ai/q#readme",
   "publishConfig": {
     "access": "public"
   },
